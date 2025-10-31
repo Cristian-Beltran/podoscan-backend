@@ -5,10 +5,12 @@ import {
   OneToOne,
   JoinColumn,
   ManyToMany,
+  OneToMany,
 } from 'typeorm';
 import { User } from './user.entity';
 import { FamilyMember } from './family.entity';
 import { Device } from '../../device/entities/device.entity';
+import { Appointment } from '../../appointment/entities/appoinment.entity';
 
 @Entity('patients')
 export class Patient {
@@ -27,4 +29,7 @@ export class Patient {
     nullable: true, // También nullable aquí
   })
   device?: Device;
+
+  @OneToMany(() => Appointment, (appointment) => appointment.patient)
+  appointments: Appointment[];
 }

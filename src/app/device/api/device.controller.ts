@@ -4,10 +4,10 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import { DeviceService } from '../servicies/device.service';
 
@@ -39,7 +39,7 @@ export class DeviceController {
     return this.deviceService.findOne(id);
   }
 
-  @Patch(':id')
+  @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateDeviceDto) {
     return this.deviceService.update(id, dto);
   }

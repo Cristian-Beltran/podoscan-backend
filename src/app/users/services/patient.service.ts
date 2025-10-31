@@ -6,7 +6,7 @@ import { Patient } from '../entities/patient.entity';
 import { CreatePatientDto } from '../dtos/patient.dto';
 import { UserBaseService } from './users.service';
 import { UserType } from '../enums/user-type';
-import { Status } from '../../../context/shared/models/active.model';
+import { Status } from 'src/context/shared/models/active.model';
 
 @Injectable()
 export class PatientService {

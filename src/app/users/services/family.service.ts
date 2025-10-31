@@ -6,7 +6,7 @@ import { FamilyMember } from '../entities/family.entity';
 import { CreateFamilyMemberDto } from '../dtos/family.dto';
 import { UserBaseService } from './users.service';
 import { UserType } from '../enums/user-type';
-import { Status } from '../../../context/shared/models/active.model';
+import { Status } from 'src/context/shared/models/active.model';
 import { Patient } from '../entities/patient.entity';
 
 @Injectable()
@@ -27,17 +27,26 @@ export class FamilyMemberService {
       fullname: dto.fullname,
       email: dto.email,
       password: dto.password,
+      // OJO: revisa si aquí realmente debe ser PATIENT o FAMILY
       type: UserType.PATIENT,
       address: dto.address,
       status: Status.ACTIVE,
     });
-    const patients = await this.patientRepository.find({
-      where: { id: In(dto.patientIds) },
-    });
+
+    // Normaliza ids
+    const ids = Array.isArray(dto.patientsId)
+      ? dto.patientsId
+      : dto.patientsId !== undefined && dto.patientsId !== null
+        ? [dto.patientsId] // venía simple → lo hacemos array
+        : [];
+
+    const patients = ids.length
+      ? await this.patientRepository.findBy({ id: In(ids) })
+      : [];
 
     const family = this.familyMemberRepository.create({
       user,
-      patients,
+      patients, // puede ir vacío; o si tu modelo lo requiere, valida y lanza 400
     });
     return this.familyMemberRepository.save(family);
   }
@@ -51,7 +60,7 @@ export class FamilyMemberService {
 
   async findOne(id: string): Promise<FamilyMember> {
     const family = await this.familyMemberRepository.findOne({
-      where: { id },
+      where: { user: { id } },
       relations: ['user', 'patients'],
     });
     if (!family) throw new NotFoundException(`FamilyMember ${id} not found`);
@@ -70,9 +79,9 @@ export class FamilyMemberService {
       address: dto.address,
     });
 
-    if (dto.patientIds && dto.patientIds.length > 0) {
+    if (dto.patientsId && dto.patientsId.length > 0) {
       const patients = await this.patientRepository.find({
-        where: { id: In(dto.patientIds) },
+        where: { id: In(dto.patientsId) },
       });
       family.patients = patients;
     }

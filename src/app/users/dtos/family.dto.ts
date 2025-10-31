@@ -7,5 +7,5 @@ export class CreateFamilyMemberDto extends CreateUserBaseDto {
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })
-  patientIds?: string[]; // lista de pacientes que va a monitorear
+  patientsId?: string[]; // lista de pacientes que va a monitorear
 }

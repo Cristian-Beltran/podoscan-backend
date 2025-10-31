@@ -5,8 +5,10 @@ import {
   Column,
   OneToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { User } from './user.entity';
+import { Appointment } from '../../appointment/entities/appoinment.entity';
 
 @Entity('doctors')
 export class Doctor {
@@ -22,4 +24,7 @@ export class Doctor {
 
   @Column({ nullable: true })
   licenseNumber?: string;
+
+  @OneToMany(() => Appointment, (appointment) => appointment.doctor)
+  appointments: Appointment[];
 }

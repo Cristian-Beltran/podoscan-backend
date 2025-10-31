@@ -4,27 +4,32 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  CreateDateColumn,
+  Index,
 } from 'typeorm';
 import { Session } from './session.entity';
 
 @Entity('session_data')
+@Index('idx_session_data_recorded_at', ['recordedAt'])
 export class SessionData {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn('uuid') id: string;
 
-  @ManyToOne(() => Session, (session) => session.records)
+  @ManyToOne(() => Session, (s) => s.records, { onDelete: 'CASCADE' })
   session: Session;
 
-  @Column('float')
-  lungCapacity: number; // voltajes +/- convertidos a valor clínico
+  // Presión (piezo calibrado o voltaje)
+  @Column('float') p1: number; // talón
+  @Column('float') p2: number; // mediopié
+  @Column('float') p3: number; // antepié
+  @Column('float') p4?: number; // antepié 2
+  @Column('float') p5?: number; // antepié 3
 
-  @Column('int')
-  pulse: number;
+  // IMU (aceleración y giros)
+  @Column('float') ax: number;
+  @Column('float') ay: number;
+  @Column('float') az: number;
+  @Column('float') gx: number;
+  @Column('float') gy: number;
+  @Column('float') gz: number;
 
-  @Column('int')
-  oxygenSaturation: number;
-
-  @CreateDateColumn()
-  recordedAt: Date;
+  @Column({ type: 'timestamp' }) recordedAt: Date;
 }
