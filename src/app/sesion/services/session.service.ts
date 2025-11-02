@@ -19,34 +19,36 @@ export class SessionService {
     private readonly sessionRepo: Repository<Session>,
     @InjectRepository(SessionData)
     private readonly dataRepo: Repository<SessionData>,
-    @InjectRepository(SessionData)
+    @InjectRepository(Device)
     private readonly deviceRepo: Repository<Device>,
   ) {}
 
-  private dayBounds(base = new Date()) {
-    const start = new Date(base);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(base);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-  }
+  private readonly TZ = 'America/La_Paz'; // ajusta si aplica
 
   private async getOrCreateTodaySession(patient: Patient, device: Device) {
-    const { start, end } = this.dayBounds();
-
-    let session = await this.sessionRepo.findOne({
-      where: {
-        patient,
-        device,
-        startedAt: Between(start, end),
-      },
-      relations: ['patient', 'device'],
-    });
+    // Busca la sesión del "día local" en TZ elegida, pero comparando en UTC
+    let session = await this.sessionRepo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.patient', 'patient')
+      .leftJoinAndSelect('s.device', 'device')
+      .where('s.patientId = :patientId', { patientId: patient.id })
+      .andWhere('s.deviceId = :deviceId', { deviceId: device.id })
+      // ventana del día (TZ) convertida a UTC:
+      .andWhere(
+        `s.startedAt >= timezone('UTC', date_trunc('day', now() at time zone :tz))`,
+        { tz: this.TZ },
+      )
+      .andWhere(
+        `s.startedAt <  timezone('UTC', date_trunc('day', (now() at time zone :tz) + interval '1 day'))`,
+        { tz: this.TZ },
+      )
+      .getOne();
 
     if (!session) {
       session = this.sessionRepo.create({
         patient,
         device,
+        startedAt: new Date(), // imprescindible
       });
       session = await this.sessionRepo.save(session);
       session = await this.sessionRepo.findOneOrFail({
@@ -95,7 +97,6 @@ export class SessionService {
       gx: dto.gx,
       gy: dto.gy,
       gz: dto.gz,
-      recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : new Date(),
     });
 
     const saved = await this.dataRepo.save(record);

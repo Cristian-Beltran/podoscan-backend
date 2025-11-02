@@ -5,6 +5,7 @@ import {
   Column,
   ManyToOne,
   Index,
+  CreateDateColumn,
 } from 'typeorm';
 import { Session } from './session.entity';
 
@@ -31,5 +32,6 @@ export class SessionData {
   @Column('float') gy: number;
   @Column('float') gz: number;
 
-  @Column({ type: 'timestamp' }) recordedAt: Date;
+  @CreateDateColumn()
+  recordedAt: Date;
 }
