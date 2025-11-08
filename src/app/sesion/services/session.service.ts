@@ -112,18 +112,44 @@ export class SessionService {
       record: saved,
     };
   }
+
   async listAllByPatient(patientId: string) {
-    // Trae sesiones del paciente (con device/patient por si quieres mostrar en UI)
     const sessions = await this.sessionRepo.find({
       where: { patient: { id: patientId } },
       order: { startedAt: 'DESC' },
       relations: ['patient', 'device', 'records'],
     });
 
-    if (sessions.length === 0) {
-      // puedes retornar [] en lugar de lanzar si prefieres
-      return [];
-    }
-    return sessions;
+    if (sessions.length === 0) return [];
+
+    return sessions.map((s) => ({
+      ...s,
+      records: s.records.map((r) => ({
+        ...r,
+        p1: this.voltageToKg(r.p1),
+        p2: this.voltageToKg(r.p2),
+        p3: this.voltageToKg(r.p3),
+        p4: this.voltageToKg(r.p4),
+        p5: this.voltageToKg(r.p5),
+      })),
+    }));
+  }
+
+  // utils/fsr-conversion.ts
+  voltageToKg(vout: number): number {
+    const VCC = 3.3;
+    const R_FIXED = 10_000;
+    if (vout <= 0) return 0;
+
+    // calcula Rsensor según divisor
+    const Rs = R_FIXED * ((VCC - vout) / vout);
+
+    // modelo derivado del SEN0295
+    const a = 8.7e7;
+    const b = 1.54;
+    const kg = a * Math.pow(Rs, -b);
+
+    // límites
+    return Math.max(0, Math.min(kg, 6));
   }
 }

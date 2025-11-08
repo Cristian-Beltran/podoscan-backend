@@ -108,6 +108,7 @@ export class AppoinmentService {
   }
 
   // ----------------- Upload con IA -----------------
+
   async uploadPhoto(
     id: string,
     file: Express.Multer.File,
@@ -117,16 +118,28 @@ export class AppoinmentService {
     const appt = await this.get(id);
 
     const originalUrl = this.savePhotoToLocal(file);
-    let processedUrl = originalUrl; // fallback si falla IA
+    let processedUrl = originalUrl;
+
     try {
-      const bwBuffer = await this.ia.footMaskBinary(file);
-      processedUrl = this.saveBufferToLocalPNG(bwBuffer, file.originalname);
+      // 1️⃣ Máscara binaria
+      const pressureMap = await this.ia.footPressureMap(file);
+      processedUrl = this.saveBufferToLocalPNG(pressureMap, file.originalname);
+
+      // 4️⃣ Enviar a GPT para obtener porcentajes aproximados
+      const analysis = await this.ia.computeLocalFromHeatmap(pressureMap);
+      console.log(analysis);
+
+      appt.contactTotalPct = analysis.contactTotalPct;
+      appt.forefootPct = analysis.forefootPct;
+      appt.midfootPct = analysis.midfootPct;
+      appt.rearfootPct = analysis.rearfootPct;
     } catch (e) {
-      console.error(e);
+      console.error('Error en análisis IA:', e);
     }
 
     appt.originalUrl = originalUrl;
     appt.processedUrl = processedUrl;
+
     return this.repo.save(appt);
   }
 

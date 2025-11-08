@@ -25,7 +25,7 @@ export class DoctorService {
       email: dto.email,
       address: dto.address,
       password: dto.password,
-      type: UserType.PATIENT,
+      type: UserType.DOCTOR,
       status: Status.ACTIVE,
     });
     const doctor = this.doctorRepository.create({
