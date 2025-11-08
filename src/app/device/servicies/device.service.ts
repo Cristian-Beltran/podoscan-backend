@@ -57,6 +57,11 @@ export class DeviceService {
     if (dto.serialNumber !== undefined) device.serialNumber = dto.serialNumber;
     if (dto.model !== undefined) device.model = dto.model;
 
+    if (dto.patientId) {
+      const patient = await this.patientService.findOneOrThrow(dto.patientId);
+      device.patient = patient;
+    }
+
     await this.deviceRepo.save(device);
     return this.findOne(id);
   }
