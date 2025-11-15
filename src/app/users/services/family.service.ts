@@ -60,7 +60,7 @@ export class FamilyMemberService {
   async findOne(id: string): Promise<FamilyMember> {
     const family = await this.familyMemberRepository.findOne({
       where: { user: { id } },
-      relations: ['user', 'patients'],
+      relations: ['user', 'patients', 'patients.user', 'patients.device'],
     });
     if (!family) throw new NotFoundException(`FamilyMember ${id} not found`);
     return family;
