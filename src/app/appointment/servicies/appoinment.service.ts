@@ -136,12 +136,12 @@ export class AppoinmentService {
 
       // 2️⃣ Analizar con GPT (porcentajes + geometría)
       const analysis = await this.ia.analyzeFootPressure(pressureMap);
-      console.log('Foot analysis:', analysis);
 
       appt.contactTotalPct = analysis.contactTotalPct;
       appt.forefootPct = analysis.forefootPct;
       appt.midfootPct = analysis.midfootPct;
       appt.rearfootPct = analysis.rearfootPct;
+      appt.note = analysis.note;
 
       // 👉 nuevos campos
       if (analysis.forefootWidthMm !== undefined)

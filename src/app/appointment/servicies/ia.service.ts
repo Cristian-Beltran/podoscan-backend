@@ -11,6 +11,7 @@ interface FootAnalysis {
   forefootWidthMm?: number; // a
   isthmusWidthMm?: number; // b
   chippauxSmirakIndex?: number; // opcional, si ya lo calculas en la IA
+  note?: string;
 }
 
 @Injectable()
@@ -203,7 +204,7 @@ export class IaService {
           {
             role: 'system',
             content:
-              'Eres un analista de imágenes plantares. Devuelves SOLO un JSON plano con campos numéricos. Nada de texto adicional.',
+              'Eres un analista de imágenes plantares. Devuelves SOLO un JSON plano con campos numéricos y un campo de texto corto (chippauxNote). Nada de texto fuera del JSON. No des diagnósticos ni recomendaciones de tratamiento.',
           },
           {
             role: 'user',
@@ -212,16 +213,17 @@ export class IaService {
                 type: 'text',
                 text: [
                   'Analiza esta imagen plantar (mapa en grises, más presión = más oscuro).',
-                  'Devuelve un JSON con estos campos numéricos:',
+                  'Devuelve un JSON con estos campos:',
                   '- contactTotalPct: número entre 0 y 100.',
                   '- forefootPct, midfootPct, rearfootPct: porcentajes que sumen aprox 100.',
                   '- forefootWidthPx: ancho máximo de la huella en el antepié (en píxeles).',
                   '- isthmusWidthPx: ancho mínimo de la huella en la región del istmo (mediopié) en píxeles.',
+                  '- chippauxNote: comentario MUY CORTO en español (máx. 25 palabras), puramente descriptivo/orientativo en función de la relación entre antepié e istmo (índice de Chippaux-Smirak).',
                   '',
                   'Ejemplo de respuesta (no lo uses literal, solo el formato):',
-                  '{ "contactTotalPct": 70.5, "forefootPct": 45, "midfootPct": 25, "rearfootPct": 30, "forefootWidthPx": 180, "isthmusWidthPx": 72 }',
+                  '{ "contactTotalPct": 70.5, "forefootPct": 45, "midfootPct": 25, "rearfootPct": 30, "forefootWidthPx": 180, "isthmusWidthPx": 72, "chippauxNote": "Índice moderado, arco algo descendido. Interpretar junto con exploración clínica." }',
                   '',
-                  'No añadas comentarios, solo el JSON.',
+                  'No añadas comentarios fuera del JSON.',
                 ].join('\n'),
               },
               {
@@ -253,10 +255,14 @@ export class IaService {
       const forefootWidthPx = Number(parsed.forefootWidthPx ?? 0);
       const isthmusWidthPx = Number(parsed.isthmusWidthPx ?? 0);
 
+      const chippauxNoteFromIa =
+        typeof parsed.chippauxNote === 'string'
+          ? parsed.chippauxNote.trim()
+          : undefined;
+
       // Si no hay datos válidos de presión → fallback local completo
       if (!Number.isFinite(fore + mid + rear) || fore + mid + rear === 0) {
         const local = await this.computeLocalFromHeatmap(heatmapBuffer);
-        // sin mediciones geométricas; únicamente porcentajes locales
         return local;
       }
 
@@ -288,7 +294,7 @@ export class IaService {
 
         // índice usando solo píxeles (dimensionalmente correcto)
         const index = isthmusWidthPx / forefootWidthPx; // b/a
-        chippauxSmirakIndex = +(index * 100).toFixed(2); // lo guardamos como %
+        chippauxSmirakIndex = +(index * 100).toFixed(2); // %
       }
 
       return {
@@ -299,9 +305,9 @@ export class IaService {
         forefootWidthMm,
         isthmusWidthMm,
         chippauxSmirakIndex,
+        note: chippauxNoteFromIa,
       };
     } catch (err) {
-      // error en GPT → fallback local de porcentajes
       const local = await this.computeLocalFromHeatmap(heatmapBuffer);
       return local;
     }
