@@ -1,6 +1,5 @@
 // src/app/session/dtos/ingest.dto.ts
 import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
-
 export class IngestSessionDto {
   @IsString()
   serialNumber: string;

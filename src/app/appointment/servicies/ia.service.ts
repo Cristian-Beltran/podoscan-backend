@@ -2,12 +2,17 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import * as sharp from 'sharp';
 import OpenAI from 'openai';
 
-type PressureJSON = {
+interface FootAnalysis {
   contactTotalPct: number;
   forefootPct: number;
   midfootPct: number;
   rearfootPct: number;
-};
+
+  forefootWidthMm?: number; // a
+  isthmusWidthMm?: number; // b
+  chippauxSmirakIndex?: number; // opcional, si ya lo calculas en la IA
+}
+
 @Injectable()
 export class IaService {
   /**
@@ -15,6 +20,11 @@ export class IaService {
    */
 
   private readonly openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  private readonly MM_PER_PIXEL = 0.048;
+
+  private pxToMm(px: number): number {
+    return +(px * this.MM_PER_PIXEL).toFixed(2);
+  }
 
   async footMaskBinary(file: Express.Multer.File): Promise<Buffer> {
     if (!file?.buffer || file.size === 0) {
@@ -100,37 +110,43 @@ export class IaService {
    * Analiza la imagen térmica con GPT-4-mini para obtener porcentajes aproximados.
    */
 
-  async computeLocalFromHeatmap(heatmapBuffer: Buffer): Promise<PressureJSON> {
+  async computeLocalFromHeatmap(heatmapBuffer: Buffer): Promise<FootAnalysis> {
     const img = sharp(heatmapBuffer).toColourspace('b-w');
     const { data, info } = await img
       .raw()
       .toBuffer({ resolveWithObject: true });
+
     const { width: w, height: h, channels } = info;
+    let pixels = data;
+    let width = w;
+    let height = h;
+
+    // si viniera con más de 1 canal, lo normalizamos a 1 canal
     if (channels !== 1) {
-      // garantizar 1 canal
       const again = await sharp(heatmapBuffer)
         .greyscale()
         .raw()
         .toBuffer({ resolveWithObject: true });
-      return this.computeLocalFromHeatmap(again.data);
+      pixels = again.data;
+      width = again.info.width;
+      height = again.info.height;
     }
 
-    // Particiones (0=top => antepié, h-1=bottom => retropié)
-    const yForeEnd = Math.floor(h * 0.35); // parte “delantera”
-    const yMidEnd = Math.floor(h * 0.65); // medio
-    // rear = yMidEnd..h-1
+    const yForeEnd = Math.floor(height * 0.35);
+    const yMidEnd = Math.floor(height * 0.65);
 
     let sumFore = 0,
       sumMid = 0,
       sumRear = 0,
       countMask = 0,
       sumAll = 0;
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = y * w + x;
-        const g = data[idx]; // 0..255 (oscuro = más presión)
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x;
+        const g = pixels[idx]; // 0..255
         const p = 1 - g / 255; // presión 0..1
-        if (p <= 0) continue; // fondo negro puro (sin pie) no aporta
+        if (p <= 0) continue; // fondo
         countMask++;
         sumAll += p;
         if (y < yForeEnd) sumFore += p;
@@ -140,7 +156,6 @@ export class IaService {
     }
 
     if (countMask === 0 || sumAll === 0) {
-      // sin pie o mapa vacío
       return {
         contactTotalPct: 0,
         forefootPct: 0,
@@ -149,16 +164,13 @@ export class IaService {
       };
     }
 
-    // Distribución relativa (suma 100)
     const forePct = (sumFore / sumAll) * 100;
     const midPct = (sumMid / sumAll) * 100;
     const rearPct = (sumRear / sumAll) * 100;
-
-    // “contacto total” como intensidad media global (0..100)
     const contact = (sumAll / countMask) * 100;
 
-    // clamp + redondeo
     const clamp = (v: number) => Math.max(0, Math.min(100, +v.toFixed(2)));
+
     return {
       contactTotalPct: clamp(contact),
       forefootPct: clamp(forePct),
@@ -171,8 +183,14 @@ export class IaService {
    * IA: analiza el heatmap usando GPT con entrada de imagen REAL (input_image).
    * Fuerza salida JSON. Si falla o devuelve ceros ⇒ fallback local.
    */
-  async analyzeFootPressure(heatmapBuffer: Buffer): Promise<PressureJSON> {
-    // Data URL para input_image
+
+  /**
+   * IA: analiza el heatmap con GPT (imagen real) y devuelve:
+   * - % de presión por región
+   * - ancho antepié (a) e istmo (b) en píxeles
+   * - índice de Chippaux-Smirak calculado en backend usando píxeles.
+   */
+  async analyzeFootPressure(heatmapBuffer: Buffer): Promise<FootAnalysis> {
     const base64 = heatmapBuffer.toString('base64');
     const dataUrl = `data:image/png;base64,${base64}`;
 
@@ -180,23 +198,31 @@ export class IaService {
       const resp = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         temperature: 0,
-        // fuerza JSON “plano”
         response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
             content:
-              'Eres un analista de imágenes plantares. Responde ÚNICAMENTE un JSON plano con cuatro campos numéricos.',
+              'Eres un analista de imágenes plantares. Devuelves SOLO un JSON plano con campos numéricos. Nada de texto adicional.',
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text:
-                  'Analiza esta imagen plantar (mapa en grises: más presión = más oscuro) y devuelve un JSON con % aproximados.' +
-                  ' Campos: contactTotalPct, forefootPct, midfootPct, rearfootPct. Suma fore+mid+rear ≈ 100.' +
-                  ' No incluyas texto adicional.',
+                text: [
+                  'Analiza esta imagen plantar (mapa en grises, más presión = más oscuro).',
+                  'Devuelve un JSON con estos campos numéricos:',
+                  '- contactTotalPct: número entre 0 y 100.',
+                  '- forefootPct, midfootPct, rearfootPct: porcentajes que sumen aprox 100.',
+                  '- forefootWidthPx: ancho máximo de la huella en el antepié (en píxeles).',
+                  '- isthmusWidthPx: ancho mínimo de la huella en la región del istmo (mediopié) en píxeles.',
+                  '',
+                  'Ejemplo de respuesta (no lo uses literal, solo el formato):',
+                  '{ "contactTotalPct": 70.5, "forefootPct": 45, "midfootPct": 25, "rearfootPct": 30, "forefootWidthPx": 180, "isthmusWidthPx": 72 }',
+                  '',
+                  'No añadas comentarios, solo el JSON.',
+                ].join('\n'),
               },
               {
                 type: 'image_url',
@@ -207,49 +233,77 @@ export class IaService {
         ],
       });
 
-      const raw = resp.choices?.[0]?.message?.content?.trim() || '{}';
-      let parsed: any = {};
+      const raw = resp.choices?.[0]?.message?.content?.trim() ?? '{}';
+
+      let parsed: any;
       try {
         parsed = JSON.parse(raw);
       } catch {
-        // el modelo no respetó el formato; usamos fallback
-        return await this.computeLocalFromHeatmap(heatmapBuffer);
+        parsed = {};
       }
 
-      // saneo + clamps + normalización suave
-      let fore = Number(parsed.forefootPct ?? 0);
-      let mid = Number(parsed.midfootPct ?? 0);
-      let rear = Number(parsed.rearfootPct ?? 0);
-      let contact = Number(parsed.contactTotalPct ?? 0);
+      const clamp01 = (v: number) =>
+        Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
 
-      const clamp01 = (v: number) => Math.max(0, Math.min(100, v));
-      fore = clamp01(fore);
-      mid = clamp01(mid);
-      rear = clamp01(rear);
-      contact = clamp01(contact);
+      let fore = clamp01(Number(parsed.forefootPct));
+      let mid = clamp01(Number(parsed.midfootPct));
+      let rear = clamp01(Number(parsed.rearfootPct));
+      let contact = clamp01(Number(parsed.contactTotalPct));
 
-      // si todo es 0 o NaN ⇒ fallback local
-      if (fore + mid + rear === 0) {
-        return await this.computeLocalFromHeatmap(heatmapBuffer);
+      const forefootWidthPx = Number(parsed.forefootWidthPx ?? 0);
+      const isthmusWidthPx = Number(parsed.isthmusWidthPx ?? 0);
+
+      // Si no hay datos válidos de presión → fallback local completo
+      if (!Number.isFinite(fore + mid + rear) || fore + mid + rear === 0) {
+        const local = await this.computeLocalFromHeatmap(heatmapBuffer);
+        // sin mediciones geométricas; únicamente porcentajes locales
+        return local;
       }
 
-      // Normaliza fore+mid+rear a 100 manteniendo proporción
+      // Normalizar fore+mid+rear a 100
       const sum = fore + mid + rear;
       if (sum > 0) {
-        fore = +(fore * (100 / sum)).toFixed(2);
-        mid = +(mid * (100 / sum)).toFixed(2);
-        rear = +(rear * (100 / sum)).toFixed(2);
+        const factor = 100 / sum;
+        fore = +(fore * factor).toFixed(2);
+        mid = +(mid * factor).toFixed(2);
+        rear = +(rear * factor).toFixed(2);
+      }
+
+      contact = +contact.toFixed(2);
+
+      // ---- medición en píxeles → mm + índice Chippaux ----
+      let forefootWidthMm: number | undefined;
+      let isthmusWidthMm: number | undefined;
+      let chippauxSmirakIndex: number | undefined;
+
+      if (
+        Number.isFinite(forefootWidthPx) &&
+        Number.isFinite(isthmusWidthPx) &&
+        forefootWidthPx > 0 &&
+        isthmusWidthPx > 0
+      ) {
+        // escalado físico
+        forefootWidthMm = this.pxToMm(forefootWidthPx);
+        isthmusWidthMm = this.pxToMm(isthmusWidthPx);
+
+        // índice usando solo píxeles (dimensionalmente correcto)
+        const index = isthmusWidthPx / forefootWidthPx; // b/a
+        chippauxSmirakIndex = +(index * 100).toFixed(2); // lo guardamos como %
       }
 
       return {
-        contactTotalPct: +contact.toFixed(2),
+        contactTotalPct: contact,
         forefootPct: fore,
         midfootPct: mid,
         rearfootPct: rear,
+        forefootWidthMm,
+        isthmusWidthMm,
+        chippauxSmirakIndex,
       };
     } catch (err) {
-      // red de IA caída / timeout ⇒ fallback local
-      return await this.computeLocalFromHeatmap(heatmapBuffer);
+      // error en GPT → fallback local de porcentajes
+      const local = await this.computeLocalFromHeatmap(heatmapBuffer);
+      return local;
     }
   }
 }

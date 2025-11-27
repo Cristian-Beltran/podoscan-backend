@@ -93,12 +93,21 @@ export class AppoinmentService {
     dto: EditAppoinmentPatientDataDto,
   ): Promise<Appointment> {
     const appt = await this.get(id);
+
     if (dto.note !== undefined) appt.note = dto.note;
     if (dto.contactTotalPct !== undefined)
       appt.contactTotalPct = dto.contactTotalPct;
     if (dto.forefootPct !== undefined) appt.forefootPct = dto.forefootPct;
     if (dto.midfootPct !== undefined) appt.midfootPct = dto.midfootPct;
     if (dto.rearfootPct !== undefined) appt.rearfootPct = dto.rearfootPct;
+    if (dto.forefootWidthMm !== undefined)
+      appt.forefootWidthMm = dto.forefootWidthMm;
+
+    if (dto.isthmusWidthMm !== undefined)
+      appt.isthmusWidthMm = dto.isthmusWidthMm;
+
+    if (dto.chippauxSmirakIndex !== undefined)
+      appt.chippauxSmirakIndex = dto.chippauxSmirakIndex;
 
     return this.repo.save(appt);
   }
@@ -121,18 +130,28 @@ export class AppoinmentService {
     let processedUrl = originalUrl;
 
     try {
-      // 1️⃣ Máscara binaria
+      // 1️⃣ Generar mapa / heatmap
       const pressureMap = await this.ia.footPressureMap(file);
       processedUrl = this.saveBufferToLocalPNG(pressureMap, file.originalname);
 
-      // 4️⃣ Enviar a GPT para obtener porcentajes aproximados
-      const analysis = await this.ia.computeLocalFromHeatmap(pressureMap);
-      console.log(analysis);
+      // 2️⃣ Analizar con GPT (porcentajes + geometría)
+      const analysis = await this.ia.analyzeFootPressure(pressureMap);
+      console.log('Foot analysis:', analysis);
 
       appt.contactTotalPct = analysis.contactTotalPct;
       appt.forefootPct = analysis.forefootPct;
       appt.midfootPct = analysis.midfootPct;
       appt.rearfootPct = analysis.rearfootPct;
+
+      // 👉 nuevos campos
+      if (analysis.forefootWidthMm !== undefined)
+        appt.forefootWidthMm = analysis.forefootWidthMm;
+
+      if (analysis.isthmusWidthMm !== undefined)
+        appt.isthmusWidthMm = analysis.isthmusWidthMm;
+
+      if (analysis.chippauxSmirakIndex !== undefined)
+        appt.chippauxSmirakIndex = analysis.chippauxSmirakIndex;
     } catch (e) {
       console.error('Error en análisis IA:', e);
     }

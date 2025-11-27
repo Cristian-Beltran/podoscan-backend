@@ -26,8 +26,20 @@ export class Appointment {
   @Column('float', { default: 0 }) midfootPct?: number;
   @Column('float', { default: 0 }) rearfootPct?: number;
 
+  // 👉 Nuevo: métricas de ancho para índice Chippaux-Smirak
+  @Column('float', { nullable: true })
+  forefootWidthMm?: number; // a = ancho del antepié (mm)
+
+  @Column('float', { nullable: true })
+  isthmusWidthMm?: number; // b = ancho del istmo (mm)
+
+  @Column('float', { nullable: true })
+  chippauxSmirakIndex?: number;
+  // convención: porcentaje = (b / a) * 100
+
   // Nota clínica del doctor acerca de la cita
   @Column({ type: 'text', nullable: true }) note?: string;
+
   @CreateDateColumn() createdAt: Date;
 
   @ManyToOne(
