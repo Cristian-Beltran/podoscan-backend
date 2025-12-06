@@ -116,24 +116,31 @@ export class SessionService {
 
   async listAllByPatient(patientId: string) {
     const sessions = await this.sessionRepo.find({
-      where: { patient: { id: patientId } },
+      where: { patient: { user: { id: patientId } } },
       order: { startedAt: 'DESC' },
       relations: ['patient', 'device', 'records'],
     });
 
     if (sessions.length === 0) return [];
 
-    return sessions.map((s) => ({
-      ...s,
-      records: s.records.map((r) => ({
-        ...r,
-        p1: this.voltageToKg(r.p1),
-        p2: this.voltageToKg(r.p2),
-        p3: this.voltageToKg(r.p3),
-        p4: this.voltageToKg(r.p4),
-        p5: this.voltageToKg(r.p5),
-      })),
-    }));
+    return sessions.map((s) => {
+      // Ordenar los records por fecha DESC (nuevo → antiguo)
+      const orderedRecords = [...s.records].sort(
+        (a, b) =>
+          new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+      );
+      return {
+        ...s,
+        records: orderedRecords.map((r) => ({
+          ...r,
+          p1: this.voltageToKg(r.p1),
+          p2: this.voltageToKg(r.p2),
+          p3: this.voltageToKg(r.p3),
+          p4: this.voltageToKg(r.p4),
+          p5: this.voltageToKg(r.p5),
+        })),
+      };
+    });
   }
 
   // utils/fsr-conversion.ts

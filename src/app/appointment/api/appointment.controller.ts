@@ -21,6 +21,7 @@ import { AppoinmentService } from '../servicies/appoinment.service';
 import { UpsertAppoinmentDto } from '../dtos/appoinment.dto';
 import { EditAppoinmentPatientDataDto } from '../dtos/data-appoinment.dto';
 import type { Appointment } from '../entities/appoinment.entity';
+import { PayloadToken } from 'src/context/shared/models/token.model';
 
 @UseGuards(JwtAuthGuard)
 @Controller('appoinments')
@@ -54,8 +55,9 @@ export class AppoinmentController {
   }
 
   @Get()
-  async findAll() {
-    return this.appoinmentService.findAll();
+  async findAll(@Req() req: Request) {
+    const tokenData = req.user as PayloadToken;
+    return this.appoinmentService.findAll(tokenData.sub);
   }
 
   @Get(':id')

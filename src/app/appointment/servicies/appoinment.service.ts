@@ -71,8 +71,11 @@ export class AppoinmentService {
     return this.repo.save(entity);
   }
 
-  async findAll(): Promise<Appointment[]> {
-    return this.repo.find({ relations: ['patient.user', 'doctor.user'] });
+  async findAll(id): Promise<Appointment[]> {
+    return this.repo.find({
+      relations: ['patient.user', 'doctor.user'],
+      where: { doctor: { user: { id } } },
+    });
   }
 
   async update(id: string, dto: UpsertAppoinmentDto): Promise<Appointment> {
@@ -113,7 +116,7 @@ export class AppoinmentService {
   }
 
   async findByPatient(id: string): Promise<Appointment[]> {
-    return this.repo.find({ where: { patient: { id } } });
+    return this.repo.find({ where: { patient: { user: { id } } } });
   }
 
   // ----------------- Upload con IA -----------------
