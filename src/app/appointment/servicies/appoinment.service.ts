@@ -75,6 +75,7 @@ export class AppoinmentService {
     return this.repo.find({
       relations: ['patient.user', 'doctor.user'],
       where: { doctor: { user: { id } } },
+      order: { createdAt: 'DESC' },
     });
   }
 

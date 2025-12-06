@@ -218,7 +218,7 @@ export class IaService {
                   '- forefootPct, midfootPct, rearfootPct: porcentajes que sumen aprox 100.',
                   '- forefootWidthPx: ancho máximo de la huella en el antepié (en píxeles).',
                   '- isthmusWidthPx: ancho mínimo de la huella en la región del istmo (mediopié) en píxeles.',
-                  '- chippauxNote: La nota clínica debe incluir: Descripción detallada del patrón de apoyo observando cómo se distribuyen las cargas entre antepié, mediopié y retropié, interpretando su relación porcentual y si existe predominio de alguna zona. Interpretación geométrica basada en los anchos del antepié e istmo, explicando cómo esta relación se refleja en la continuidad o la reducción del contacto del mediopié..',
+                  '- chippauxNote: La nota clínica debe incluir: Descripción detallada del patrón de apoyo observando cómo se distribuyen las cargas entre antepié, mediopié y retropié, interpretando su relación porcentual y si existe predominio de alguna zona. Interpretación geométrica basada en los anchos del antepié e istmo, explicando cómo esta relación se refleja en la continuidad o la reducción del contacto del mediopié. Y Por ultimo una indicacion de que tipo de pie tiene si tiene pie plano en base al tamaño del pie por medio del indice de chippau',
                   '',
                   'Ejemplo de respuesta (no lo uses literal, solo el formato):',
                   '{ "contactTotalPct": 70.5, "forefootPct": 45, "midfootPct": 25, "rearfootPct": 30, "forefootWidthPx": 180, "isthmusWidthPx": 72, "chippauxNote": "Indica en qué rango se ubica el valor numérico y qué sugiere en términos morfológicos, usando un tono descriptivo y sin emitir diagnósticos cerrados." }',
