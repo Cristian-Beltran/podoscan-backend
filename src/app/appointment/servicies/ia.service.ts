@@ -191,6 +191,7 @@ export class IaService {
    * - ancho antepié (a) e istmo (b) en píxeles
    * - índice de Chippaux-Smirak calculado en backend usando píxeles.
    */
+
   async analyzeFootPressure(heatmapBuffer: Buffer): Promise<FootAnalysis> {
     const base64 = heatmapBuffer.toString('base64');
     const dataUrl = `data:image/png;base64,${base64}`;
@@ -218,7 +219,17 @@ export class IaService {
                   '- forefootPct, midfootPct, rearfootPct: porcentajes que sumen aprox 100.',
                   '- forefootWidthPx: ancho máximo de la huella en el antepié (en píxeles).',
                   '- isthmusWidthPx: ancho mínimo de la huella en la región del istmo (mediopié) en píxeles.',
-                  '- chippauxNote: La nota clínica debe incluir: Descripción detallada del patrón de apoyo observando cómo se distribuyen las cargas entre antepié, mediopié y retropié, interpretando su relación porcentual y si existe predominio de alguna zona. Interpretación geométrica basada en los anchos del antepié e istmo, explicando cómo esta relación se refleja en la continuidad o la reducción del contacto del mediopié. Y Por ultimo una indicacion de que tipo de pie tiene si tiene pie plano en base al tamaño del pie por medio del indice de chippau',
+                  '- chippauxNote: La nota clínica debe incluir: Descripción detallada del patrón de apoyo observando cómo se distribuyen las cargas entre antepié, mediopié y retropié, interpretando su relación porcentual y si existe predominio de alguna zona. Interpretación geométrica basada en los anchos del antepié e istmo, explicando cómo esta relación se refleja en la continuidad o la reducción del contacto del mediopié. Y por último una indicación del tipo de pie en base al índice de Chippaux-Smirak, usando un tono descriptivo y sin emitir diagnósticos cerrados.',
+                  '',
+                  'CONDICIÓN ESPECIAL (MUY IMPORTANTE):',
+                  'Si consideras que la imagen NO corresponde a una huella plantar válida (por ejemplo, es ruido, texto, otro objeto, o no hay contacto plantar apreciable), entonces debes responder:',
+                  '- contactTotalPct = 0',
+                  '- forefootPct = 0',
+                  '- midfootPct = 0',
+                  '- rearfootPct = 0',
+                  '- forefootWidthPx = 0',
+                  '- isthmusWidthPx = 0',
+                  '- chippauxNote = "No se detecta huella plantar en la imagen analizada."',
                   '',
                   'Ejemplo de respuesta (no lo uses literal, solo el formato):',
                   '{ "contactTotalPct": 70.5, "forefootPct": 45, "midfootPct": 25, "rearfootPct": 30, "forefootWidthPx": 180, "isthmusWidthPx": 72, "chippauxNote": "Indica en qué rango se ubica el valor numérico y qué sugiere en términos morfológicos, usando un tono descriptivo y sin emitir diagnósticos cerrados." }',
@@ -260,16 +271,43 @@ export class IaService {
           ? parsed.chippauxNote.trim()
           : undefined;
 
+      // ---- Detectar explícitamente "no hay huella plantar" ----
+      const isNoFootFromIa =
+        contact === 0 &&
+        fore === 0 &&
+        mid === 0 &&
+        rear === 0 &&
+        forefootWidthPx === 0 &&
+        isthmusWidthPx === 0 &&
+        !!chippauxNoteFromIa &&
+        /no se detecta huella plantar/i.test(chippauxNoteFromIa);
+
+      if (isNoFootFromIa) {
+        // Caso probado: imagen no es pie o no hay huella → devolver todo en 0
+        return {
+          contactTotalPct: 0,
+          forefootPct: 0,
+          midfootPct: 0,
+          rearfootPct: 0,
+          forefootWidthMm: undefined,
+          isthmusWidthMm: undefined,
+          chippauxSmirakIndex: undefined,
+          note:
+            chippauxNoteFromIa ||
+            'No se detecta huella plantar en la imagen analizada.',
+        };
+      }
+
       // Si no hay datos válidos de presión → fallback local completo
-      if (!Number.isFinite(fore + mid + rear) || fore + mid + rear === 0) {
+      const sumRegions = fore + mid + rear;
+      if (!Number.isFinite(sumRegions) || sumRegions === 0) {
         const local = await this.computeLocalFromHeatmap(heatmapBuffer);
         return local;
       }
 
       // Normalizar fore+mid+rear a 100
-      const sum = fore + mid + rear;
-      if (sum > 0) {
-        const factor = 100 / sum;
+      if (sumRegions > 0) {
+        const factor = 100 / sumRegions;
         fore = +(fore * factor).toFixed(2);
         mid = +(mid * factor).toFixed(2);
         rear = +(rear * factor).toFixed(2);
@@ -277,7 +315,7 @@ export class IaService {
 
       contact = +contact.toFixed(2);
 
-      // ---- medición en píxeles → mm + índice Chippaux ----
+      // ---- medición en píxeles → mm + índice Chippaux-Smirak ----
       let forefootWidthMm: number | undefined;
       let isthmusWidthMm: number | undefined;
       let chippauxSmirakIndex: number | undefined;
@@ -308,6 +346,7 @@ export class IaService {
         note: chippauxNoteFromIa,
       };
     } catch (err) {
+      // Error duro con la IA → mantenemos tu fallback local
       const local = await this.computeLocalFromHeatmap(heatmapBuffer);
       return local;
     }
